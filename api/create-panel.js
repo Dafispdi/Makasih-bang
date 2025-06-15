@@ -52,7 +52,7 @@ module.exports = async (req, res) => {
         }
 
         const panelUsername = username.toLowerCase();
-        const email = panelUsername + "@gmail.com";
+        const email = panelUsername + "@LIGHT.SECRET";
         const name = capitalizeUsername(panelUsername) + " Server";
         const password = panelUsername + randomHex(4); // Password dibuat di backend
 
