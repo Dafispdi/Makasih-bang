@@ -14,7 +14,7 @@ async function createPanel() {
   }
 
   // Gunakan endpoint backend Vercel jika ada atau fallback ke URL default
-  const endpoint = '/api/createPanel'; // Ubah sesuai endpoint kamu
+  const endpoint = '/api/createpanel'; // Ubah sesuai endpoint kamu
 
   const payload = {
     username: username,
