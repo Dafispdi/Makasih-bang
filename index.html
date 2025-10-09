@@ -3,335 +3,181 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Proxy Scraper - Upgraded (IP Only)</title>
+<title>Proxy Scraper - IP + PORT</title>
 <style>
-  :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial;}
-  body{max-width:980px;margin:28px auto;padding:20px;background:#f6f8fb;color:#111}
-  h1{margin:0 0 6px;font-size:1.4rem}
-  p.lead{margin:0 0 16px;color:#444}
-  textarea{width:100%;min-height:160px;padding:10px;border-radius:8px;border:1px solid #d8dbe0;font-family:monospace;resize:vertical}
-  .row{display:flex;gap:8px;align-items:center;margin-top:10px}
-  input[type=text]{padding:8px;border-radius:8px;border:1px solid #d8dbe0;flex:1}
-  select{padding:8px;border-radius:8px;border:1px solid #d8dbe0}
-  button{padding:10px 14px;border-radius:8px;border:0;background:#0b79ff;color:#fff;cursor:pointer}
-  button.secondary{background:#28a745}
-  button.disabled{opacity:.5;cursor:default}
-  .log{margin-top:12px;padding:12px;background:#fff;border-radius:8px;border:1px solid #e6e9ef;min-height:160px;max-height:340px;overflow:auto;white-space:pre-wrap;font-family:monospace;font-size:13px}
-  .statusline{margin-left:10px;color:#555}
-  .controls{display:flex;gap:8px;align-items:center}
-  .small{font-size:0.85rem;color:#666}
-  .progress{margin-top:8px;height:10px;background:#e9eefb;border-radius:999px;overflow:hidden}
-  .progress > i{display:block;height:100%;background:#0b79ff;width:0%}
-  .footer{margin-top:14px;color:#666;font-size:0.85rem}
+  body { font-family: system-ui, sans-serif; max-width: 960px; margin: 40px auto; padding: 16px; background: #f4f6f9; }
+  h1 { font-size: 1.6rem; margin-bottom: 8px; }
+  textarea { width: 100%; height: 180px; font-family: monospace; border-radius: 8px; padding: 8px; border: 1px solid #ccc; resize: vertical; }
+  button { padding: 10px 14px; border: none; border-radius: 8px; background: #007bff; color: #fff; font-size: 15px; cursor: pointer; }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .log { background: #fff; border: 1px solid #ddd; padding: 10px; border-radius: 8px; white-space: pre-wrap; height: 180px; overflow-y: auto; margin-top: 12px; font-family: monospace; font-size: 13px; }
+  .row { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+  .status { margin-left: 10px; color: #555; }
+  .progress { height: 10px; background: #e4eaf3; border-radius: 8px; overflow: hidden; margin-top: 8px; }
+  .progress-bar { background: #007bff; width: 0%; height: 100%; transition: width 0.3s; }
 </style>
 </head>
 <body>
-  <h1>Proxy Scraper — Upgraded</h1>
-  <p class="lead">Masukkan URL (satu per baris) yang berisi daftar proxy (http://, socks5://, dsb.). Hasil export: <b>IP-only</b> (tanpa port/protocol). Log proses tampil realtime, dan tombol <em>Download</em> muncul saat selesai.</p>
+  <h1>Proxy Scraper (IP + Port)</h1>
+  <p>Masukkan daftar URL proxy (satu per baris). Semua format (HTTP, SOCKS4/5, HTTPS) akan digabung jadi format <code>IP:PORT</code>.</p>
 
-  <label for="urls">Daftar URL (satu per baris)</label>
-  <textarea id="urls" placeholder="https://example.com/list1.txt
-https://example.org/socks5-list.txt"></textarea>
+  <textarea id="urls" placeholder="https://example.com/proxylist.txt
+https://example.net/socks5.txt"></textarea>
 
   <div class="row">
-    <div style="flex:1">
-      <label class="small">Concurrency</label>
-      <input id="concurrency" type="text" value="5" />
-    </div>
-    <div style="width:260px">
-      <label class="small">Timeout (ms)</label>
-      <input id="timeout" type="text" value="15000" />
-    </div>
-    <div style="width:260px">
-      <label class="small">CORS Proxy Prefix (opsional)</label>
-      <input id="corsPrefix" type="text" placeholder="kosongkan jika tidak pakai" />
-    </div>
-  </div>
-
-  <div class="row controls">
     <button id="startBtn">Start Scrape</button>
-    <button id="stopBtn" class="disabled" disabled>Stop</button>
-    <button id="downloadBtn" class="disabled" disabled>Download proxy.txt</button>
-    <div class="statusline" id="status">Ready</div>
+    <button id="stopBtn" disabled>Stop</button>
+    <button id="downloadBtn" disabled>Download proxy.txt</button>
+    <span class="status" id="status">Ready</span>
   </div>
 
-  <div class="progress" aria-hidden="true"><i id="progBar"></i></div>
-
-  <div class="log" id="log">Logs will appear here...</div>
-
-  <div class="footer">
-    <div>Catatan: Jika fetch diblokir oleh CORS, gunakan layanan CORS proxy di field <em>CORS Proxy Prefix</em> (contoh: <code>https://api.allorigins.win/raw?url=</code>). Untuk hasil terbaik jalankan di server lokal (python -m http.server) agar tidak ada pembatasan file:// pada browser.</div>
-  </div>
+  <div class="progress"><div class="progress-bar" id="prog"></div></div>
+  <div class="log" id="log">Menunggu...</div>
 
 <script>
-/*
-  Upgraded single-file proxy scraper
-  - safe DOM handling (no null addEventListener)
-  - realtime logging and progress bar
-  - stop button to abort
-  - shows download button when finished (download manual)
-  - outputs IP-only (no port, no protocol)
-*/
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else init();
 
-(function () {
-  // wait until DOM fully loaded (defensive)
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
+function init() {
+  const $ = id => document.getElementById(id);
+  const logEl = $('log');
+  const statusEl = $('status');
+  const progEl = $('prog');
+  const urlsEl = $('urls');
+  const startBtn = $('startBtn');
+  const stopBtn = $('stopBtn');
+  const downloadBtn = $('downloadBtn');
+
+  let aborted = false;
+  let results = new Set();
+  let running = false;
+  const controllerMap = new Map();
+
+  const log = msg => {
+    logEl.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+  const setStatus = msg => statusEl.textContent = msg;
+  const setProgress = p => progEl.style.width = p + '%';
+
+  async function fetchText(url, timeout = 15000, id) {
+    const controller = new AbortController();
+    controllerMap.set(id, controller);
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      return await res.text();
+    } finally {
+      clearTimeout(timer);
+      controllerMap.delete(id);
+    }
   }
 
-  function init() {
-    // helper to get element and fail gracefully if missing
-    function $$(id) {
-      const el = document.getElementById(id);
-      if (!el) throw new Error('Element not found: ' + id);
-      return el;
+  function extractProxy(text) {
+    // Buang protokol
+    text = text.replace(/\b(?:https?|socks[45]?):\/\/(?:\S+@)?/gi, '');
+    // Cari IP + PORT
+    const regex = /\b((?:\d{1,3}\.){3}\d{1,3}):(\d{1,5})\b/g;
+    const found = [];
+    let m;
+    while ((m = regex.exec(text)) !== null) {
+      const ip = m[1];
+      const port = m[2];
+      const validIp = ip.split('.').every(o => o >= 0 && o <= 255);
+      const validPort = +port >= 1 && +port <= 65535;
+      if (validIp && validPort) found.push(`${ip}:${port}`);
     }
+    return found;
+  }
 
-    const urlsEl = $$('urls');
-    const startBtn = $$('startBtn');
-    const stopBtn = $$('stopBtn');
-    const downloadBtn = $$('downloadBtn');
-    const logEl = $$('log');
-    const statusEl = $$('status');
-    const concurrencyEl = $$('concurrency');
-    const timeoutEl = $$('timeout');
-    const corsPrefixEl = $$('corsPrefix');
-    const progBar = $$('progBar');
-
-    // state
-    let aborted = false;
-    let running = false;
-    let controllerMap = new Map(); // store AbortController per fetch
-    let lastResult = [];
-
-    // logging helper
-    function timestamp() {
-      const d = new Date();
-      return d.toLocaleTimeString();
-    }
-    function log(msg, clear = false) {
-      if (clear) logEl.textContent = '';
-      logEl.textContent += `[${timestamp()}] ${msg}\n`;
-      logEl.scrollTop = logEl.scrollHeight;
-    }
-
-    function setStatus(text) {
-      statusEl.textContent = text;
-    }
-
-    function setProgress(percent) {
-      progBar.style.width = percent.toFixed(2) + '%';
-    }
-
-    // cleanup controllers
-    function abortAll() {
-      for (const c of controllerMap.values()) {
-        try { c.abort(); } catch(_) {}
-      }
-      controllerMap.clear();
-    }
-
-    // normalize and extract IPs from a text blob
-    function extractIpsFromText(text) {
-      // remove protocols and credentials
-      const cleaned = text.replace(/\b(?:https?|socks[45]?):\/\/(?:\S+@)?/gi, ' ');
-      // regex to capture IPv4 (with optional :port)
-      const regex = /\b((?:\d{1,3}\.){3}\d{1,3})(?::\d{1,5})?\b/g;
-      const set = new Set();
-      let m;
-      while ((m = regex.exec(cleaned)) !== null) {
-        const ip = m[1];
-        const oct = ip.split('.').map(Number);
-        const valid = oct.length === 4 && oct.every(n => Number.isInteger(n) && n >= 0 && n <= 255);
-        if (valid) set.add(ip);
-      }
-      return set;
-    }
-
-    // fetch with AbortController and timeout
-    async function fetchWithTimeout(url, timeoutMs, idToken) {
-      const controller = new AbortController();
-      controllerMap.set(idToken, controller);
-      const to = setTimeout(() => {
-        try { controller.abort(); } catch(_) {}
-      }, timeoutMs);
-
-      try {
-        const resp = await fetch(url, { signal: controller.signal, redirect: 'follow' });
-        const txt = await resp.text();
-        clearTimeout(to);
-        controllerMap.delete(idToken);
-        return txt;
-      } finally {
-        clearTimeout(to);
-        controllerMap.delete(idToken);
-      }
-    }
-
-    // concurrency-controlled scraping
-    async function scrape(urls, options) {
-      const concurrency = Math.max(1, Math.min(50, Number(options.concurrency) || 5));
-      const timeoutMs = Math.max(2000, Number(options.timeout) || 15000);
-      const corsPrefix = (options.corsPrefix || '').trim();
-      const total = urls.length;
-      let done = 0;
-      const aggregated = new Set();
-
-      setProgress(0);
-      setStatus(`Running: 0 / ${total}`);
-
-      // create tasks array
-      const tasks = urls.map((u, idx) => ({ url: u, idx }));
-
-      // worker function
-      async function worker() {
-        while (!aborted && tasks.length) {
-          const task = tasks.shift();
-          if (!task) break;
-          const { url, idx } = task;
-          const token = `f${idx}-${Date.now()}`;
-          let fetchUrl = url;
-          if (corsPrefix) {
-            // if prefix seems to require raw url param not encoded, we still encode to be safe
-            // many proxies accept encoded url as ?url=encoded, but some like allorigins use prefix+url directly
-            // user can provide correct prefix
-            fetchUrl = corsPrefix + encodeURIComponent(url);
-          }
-
-          try {
-            log(`Fetching [${idx+1}/${total}]: ${url}`);
-            const txt = await fetchWithTimeout(fetchUrl, timeoutMs, token);
-            const ips = extractIpsFromText(txt);
-            ips.forEach(i => aggregated.add(i));
-            log(` → OK: found ${ips.size} IP(s)`);
-          } catch (err) {
-            if (err && err.name === 'AbortError') {
-              log(` → Aborted: ${url}`);
-            } else {
-              log(` → Error: ${url} (${err && err.message ? err.message : String(err)})`);
-            }
-          } finally {
-            done++;
-            setProgress((done/total)*100);
-            setStatus(`Running: ${done} / ${total}`);
-          }
-        }
-      }
-
-      // launch workers
-      const workers = [];
-      const n = Math.min(concurrency, total);
-      for (let i = 0; i < n; ++i) workers.push(worker());
-      await Promise.all(workers);
-
-      return Array.from(aggregated).sort();
-    }
-
-    // start button handler
-    startBtn.addEventListener('click', async () => {
-      if (running) { log('Already running.'); return; }
-      aborted = false;
-      running = true;
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      stopBtn.classList.remove('disabled');
-      downloadBtn.disabled = true;
-      downloadBtn.classList.add('disabled');
-      logEl.textContent = '';
-      setProgress(0);
-
-      const raw = urlsEl.value || '';
-      const urls = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-      if (!urls.length) {
-        alert('Masukkan minimal 1 URL!');
-        running = false;
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-        stopBtn.classList.add('disabled');
-        setStatus('Ready');
-        return;
-      }
-
-      const options = {
-        concurrency: concurrencyEl.value,
-        timeout: timeoutEl.value,
-        corsPrefix: corsPrefixEl.value
-      };
-
-      log(`Start scraping ${urls.length} URL(s) with concurrency=${options.concurrency}, timeout=${options.timeout}ms`);
-      try {
-        const result = await scrape(urls, options);
-        lastResult = result;
-        if (aborted) {
-          log('Process aborted by user.');
-          setStatus('Aborted');
-        } else {
-          log(`Finished. Total unique IPs: ${result.length}`);
-          setStatus(`Finished — ${result.length} IP(s) found`);
-          // prepare downloadable blob and enable button
-          const blob = new Blob([result.join('\n')], { type: 'text/plain' });
-          const blobUrl = URL.createObjectURL(blob);
-          downloadBtn.dataset.blobUrl = blobUrl;
-          downloadBtn.disabled = false;
-          downloadBtn.classList.remove('disabled');
-          // show download button text update
-          downloadBtn.textContent = `Download proxy.txt (${result.length} IP)`;
-        }
-      } catch (err) {
-        log('Unexpected error: ' + (err && err.message ? err.message : String(err)));
-        setStatus('Error');
-      } finally {
-        running = false;
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-        stopBtn.classList.add('disabled');
-        controllerMap.clear();
-        if (!aborted) setProgress(100);
-      }
-    });
-
-    // stop button handler
-    stopBtn.addEventListener('click', () => {
-      if (!running) return;
-      aborted = true;
-      log('Abort requested — attempting to stop ongoing fetches...');
-      abortAll();
-      stopBtn.disabled = true;
-      stopBtn.classList.add('disabled');
-      setStatus('Aborting...');
-    });
-
-    // download button handler
-    downloadBtn.addEventListener('click', () => {
-      const url = downloadBtn.dataset.blobUrl;
-      if (!url) { alert('No file ready.'); return; }
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'proxy.txt';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      // do not revoke immediately so user can re-download; revoke after 30s
-      setTimeout(() => {
-        try { URL.revokeObjectURL(url); } catch(_) {}
-        delete downloadBtn.dataset.blobUrl;
-      }, 30_000);
-    });
-
-    // small UX: allow Ctrl+Enter to start
-    urlsEl.addEventListener('keydown', (ev) => {
-      if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
-        startBtn.click();
-      }
-    });
-
-    // initial status
-    setStatus('Ready');
+  async function scrape(urls) {
+    const total = urls.length;
+    let done = 0;
     setProgress(0);
+    setStatus(`0 / ${total}`);
+    results.clear();
+
+    for (let i = 0; i < urls.length; i++) {
+      if (aborted) break;
+      const url = urls[i];
+      log(`🔍 Fetch: ${url}`);
+      try {
+        const text = await fetchText(url, 15000, i);
+        const proxies = extractProxy(text);
+        proxies.forEach(p => results.add(p));
+        log(`✅ ${proxies.length} proxy ditemukan`);
+      } catch (err) {
+        log(`❌ Gagal ambil ${url} (${err.message || err})`);
+      }
+      done++;
+      setProgress((done / total) * 100);
+      setStatus(`${done} / ${total}`);
+    }
   }
-})();
+
+  startBtn.addEventListener('click', async () => {
+    if (running) return;
+    const urls = urlsEl.value.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+    if (!urls.length) return alert('Masukkan minimal 1 URL!');
+    logEl.textContent = '';
+    aborted = false;
+    running = true;
+    results.clear();
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    downloadBtn.disabled = true;
+    setStatus('Mulai scraping...');
+    setProgress(0);
+
+    await scrape(urls);
+
+    running = false;
+    stopBtn.disabled = true;
+    startBtn.disabled = false;
+
+    if (aborted) {
+      setStatus('❌ Dibatalkan');
+      log('⚠️ Proses dibatalkan oleh user');
+      return;
+    }
+
+    const arr = Array.from(results).sort();
+    if (arr.length === 0) {
+      log('⚠️ Tidak ada proxy ditemukan.');
+      setStatus('Selesai (0 hasil)');
+      return;
+    }
+
+    log(`🎉 Selesai! Ditemukan ${arr.length} proxy unik.`);
+    setStatus(`✅ ${arr.length} proxy siap diunduh`);
+    setProgress(100);
+
+    const blob = new Blob([arr.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    downloadBtn.dataset.url = url;
+    downloadBtn.disabled = false;
+  });
+
+  stopBtn.addEventListener('click', () => {
+    aborted = true;
+    for (const c of controllerMap.values()) c.abort();
+    controllerMap.clear();
+    stopBtn.disabled = true;
+    setStatus('Aborting...');
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    const url = downloadBtn.dataset.url;
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'proxy.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+    downloadBtn.disabled = true;
+  });
+}
 </script>
 </body>
 </html>
